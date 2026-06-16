@@ -75,8 +75,8 @@ class JdbcConfig:
     user: str
     password: str
     driver: str
-    partition_predicates: list[str]
-    fetch_size: str
+    partition_predicates: list[str] | None = None
+    fetch_size: str = "20000"
 
 
 def _cast_payload_to_string(df):
@@ -138,14 +138,6 @@ def run(
 
         # --- 2. Read ----------------------------------------------------------
         print(f"[read] Reading {source_table} via JDBC ...")
-
-        if last_watermark is not None:
-            table_query = (
-                f"(SELECT * FROM {source_table} "
-                f"WHERE {watermark_column} > '{last_watermark}') AS t"
-            )
-        else:
-            table_query = f"(SELECT * FROM {source_table}) AS t"
 
         connection_options = {
             "user": jdbc_cfg.user,
