@@ -1,0 +1,32 @@
+[0m13:53:22.298980 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001827995D750>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001827AC40340>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001827AC400D0>]}
+
+
+============================== 13:53:22.305009 | 7a605853-87e3-4692-bdda-c21189f3427a ==============================
+[0m13:53:22.305009 [info ] [MainThread]: Running with dbt=1.11.11
+[0m13:53:22.305982 [debug] [MainThread]: running dbt with arguments {'version_check': 'True', 'no_print': 'None', 'static_parser': 'True', 'target_path': 'None', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'printer_width': '80', 'write_json': 'True', 'empty': 'None', 'log_cache_events': 'False', 'introspect': 'True', 'cache_selected_only': 'False', 'fail_fast': 'False', 'debug': 'False', 'log_format': 'default', 'profiles_dir': 'C:\\Users\\Mihailcho\\.dbt', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'partial_parse': 'True', 'indirect_selection': 'eager', 'invocation_command': 'dbt init lakehouse', 'use_colors': 'True', 'use_experimental_parser': 'False', 'log_path': 'logs'}
+[0m13:53:22.338981 [debug] [MainThread]: Starter project path: C:\Users\Mihailcho\anaconda3\envs\py310\lib\site-packages\dbt\include\starter_project
+[0m13:53:22.364981 [info ] [MainThread]: 
+Your new dbt project "lakehouse" was created!
+
+For more information on how to configure the profiles.yml file,
+please consult the dbt documentation here:
+
+  https://docs.getdbt.com/docs/configure-your-profile
+
+One more thing:
+
+Need help? Don't hesitate to reach out to us via GitHub issues or on Slack:
+
+  https://community.getdbt.com/
+
+Happy modeling!
+
+[0m13:53:22.366986 [info ] [MainThread]: Setting up your profile.
+[0m13:53:24.997551 [debug] [MainThread]: Spark adapter: Setting pyhive.hive logging to ERROR
+[0m13:53:24.997551 [debug] [MainThread]: Spark adapter: Setting thrift.transport logging to ERROR
+[0m13:53:24.998551 [debug] [MainThread]: Spark adapter: Setting thrift.protocol logging to ERROR
+[0m13:53:53.207673 [info ] [MainThread]: Profile lakehouse written to C:\Users\Mihailcho\.dbt\profiles.yml using target's profile_template.yml and your supplied values. Run 'dbt debug' to validate the connection.
+[0m13:53:53.209662 [debug] [MainThread]: Command `dbt init` succeeded at 13:53:53.209662 after 31.03 seconds
+[0m13:53:53.210630 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001827995D750>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001827AC40490>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001827AC40430>]}
+[0m13:53:53.211660 [debug] [MainThread]: Flushing usage events
+[0m13:53:53.827843 [debug] [MainThread]: An error was encountered while trying to flush usage events

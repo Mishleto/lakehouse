@@ -1,0 +1,34 @@
+services:
+
+  minio:
+    image: minio/minio:latest
+    container_name: lakehouse-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  nessie:
+    image: ghcr.io/projectnessie/nessie:0.107.2
+    container_name: lakehouse-nessie
+    ports:
+      - "19120:19120"
+    environment:
+      - NESSIE_VERSION_STORE_TYPE=ROCKSDB
+      - NESSIE_VERSION_STORE_PERSIST_ROCKS_DB_DATABASE_PATH=/deployments/data/rocks
+      - QUARKUS_OTEL_SDK_DISABLED=true
+      - NESSIE_SERVER_AUTHENTICATION_ENABLED=false
+    user: root
+    depends_on:
+      - minio
+    volumes:
+      - nessie_data:/tmp/nessie-rocksdb-store
+
+volumes:
+  minio_data:
+  nessie_data:

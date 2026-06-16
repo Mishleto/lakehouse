@@ -1,0 +1,38 @@
+# Template only — committed to git.
+# Copy this file to config.dev.yaml / config.test.yaml / config.prod.yaml
+# and fill in real values. Those files are gitignored.
+
+spark:
+  master: "local[*]"
+  driver_memory: "8g"
+  shuffle_partitions: 4
+  # Optional. Set to null/remove if not needed.
+  extra_classpath: "/usr/share/java/postgresql.jar"
+
+s3a:
+  endpoint: "http://localhost:9000"
+  access_key: "CHANGE_ME"
+  secret_key: "CHANGE_ME"
+  path_style_access: true
+  buffer_dir: "/tmp/s3a"
+
+nessie:
+  catalog_name: "nessie"
+  uri: "http://localhost:19120/api/v2"
+  ref: "main"
+  warehouse: "s3a://bronze"
+
+# Logical schema names used to build fully-qualified table names.
+# Changing these per environment is what isolates DEV/TEST/PROD data.
+schemas:
+  bronze: "nessie.bronze"
+  meta: "nessie.meta"
+
+# Source data locations, per source system.
+sources:
+  ss1_dir: "/home/mihailcho/lakehouse/data/ss1/"
+  ss2_dir: "/home/mihailcho/lakehouse/data/ss2/"
+  ss3_dir: "/home/mihailcho/lakehouse/data/ss3/"
+
+logging:
+  ingestion_log_table: "nessie.meta.file_ingestion_log"
