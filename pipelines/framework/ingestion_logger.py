@@ -9,8 +9,10 @@ log tables:
 
 Public API
 ----------
-is_file_processed(spark, source_file_key, log_table)  -> bool
+get_processed_files(spark, source_dir, file_name_pattern, log_table) -> list[str]
+is_file_processed(spark, source_file_key, log_table)                 -> bool
 log_file_run(spark, ..., log_table)
+log_bulk_file_run(spark, ..., files, log_table)
 log_db_run(spark, ..., log_table)
 
 Design notes
@@ -44,6 +46,39 @@ _DB_LOG_SCHEMA = (
 # Skip-guard helpers
 # ---------------------------------------------------------------------------
 
+def get_processed_files(
+        spark:  SparkSession,
+        source_dir: str,
+        file_name_pattern: str,
+        log_table: str
+) -> list[str]:
+    """
+    Returns list with the names of all successfully processed files that
+    match this name pattern.
+
+    Used by file ingestors (csv, excel) to exclude already processed
+    files / sheets upfront with a single query.
+    """
+
+    validate_object_identifier(log_table)
+
+    safe_name_pattern = file_name_pattern.replace("'", "''").replace("*", "%")  # escape single quotes, replace glob wildcard with SQL wildcard
+    safe_dir_name = source_dir.replace("'", "''")  # escape single quotes
+
+    query_sql = f"""
+        SELECT source_file
+        FROM {log_table}
+        WHERE status = 'success'
+            and source_file like '{safe_dir_name}{safe_name_pattern}'
+    """
+
+    # print(f"\n sql query:\n {query_sql} \n")
+
+    source_file_keys = [row["source_file"] for row in spark.sql(query_sql).collect()]
+
+    return source_file_keys
+
+
 def is_file_processed(
     spark: SparkSession,
     source_file_key: str,
@@ -66,17 +101,16 @@ def is_file_processed(
         WHERE  source_file = '{safe_key}'
         AND    status      = 'success'
     """
-    
+
     count = spark.sql(query_sql).collect()[0]["cnt"]
 
-    # better way, safe agains sql injection but does not work with this version of spark
+    # better way, safe against sql injection but does not work with this version of spark
     # count = spark.sql(f"""
     #     SELECT COUNT(*) AS cnt
     #     FROM   {log_table}
     #     WHERE  source_file = :source_file
     #     AND    status      = 'success'
     # """, args={"source_file": source_file_key}).collect()[0]["cnt"]
-
 
     return count > 0
 
@@ -93,11 +127,11 @@ def get_last_watermark(
     Returns None on first run (no prior success exists).
     """
 
-    validate_object_identifier(log_table) 
+    validate_object_identifier(log_table)
 
     safe_source_system = source_system.replace("'", "''")  # escape single quotes
     safe_source_table = source_table.replace("'", "''")  # escape single quotes
-    
+
     result = spark.sql(f"""
         SELECT watermark_max
         FROM   {log_table}
@@ -144,7 +178,7 @@ def log_file_run(
     status      : 'success' or 'failed'
     """
 
-    validate_object_identifier(log_table) 
+    validate_object_identifier(log_table)
 
     log_data = [(
         source_system,
@@ -161,6 +195,43 @@ def log_file_run(
         .append()
     )
     print(f"[log] {log_table}: status={status}, rows={row_count}, source={source_file}")
+
+
+def log_bulk_file_run(
+    spark: SparkSession,
+    source_system: str,
+    target_table: str,
+    status: str,
+    files: list[tuple[str, int]],
+    message: str = "",
+    log_table: str = "",
+) -> None:
+    """
+    Appends one row per file to file_ingestion_log in a single write.
+
+    Parameters
+    ----------
+    files   : list of (source_file, row_count) tuples — one entry per file.
+              row_count should be 0 for failed runs where counts are unknown.
+    status  : 'success' or 'failed'
+    """
+
+    validate_object_identifier(log_table)
+
+    processed_at = datetime.now(timezone.utc)
+    log_data = [
+        (source_system, source_file, target_table, processed_at, row_count, status, message[:1000])
+        for source_file, row_count in files
+    ]
+    (
+        spark.createDataFrame(log_data, schema=_FILE_LOG_SCHEMA)
+        .writeTo(log_table)
+        .append()
+    )
+    print(
+        f"[log] {log_table}: status={status}, {len(files)} file(s), "
+        f"total rows={sum(rc for _, rc in files)}"
+    )
 
 
 def log_db_run(
@@ -185,7 +256,7 @@ def log_db_run(
         watermark bounds, e.g. '2026-01-15 08:22:11.000'
     """
 
-    validate_object_identifier(log_table) 
+    validate_object_identifier(log_table)
 
     log_data = [(
         source_system,

@@ -29,6 +29,7 @@ csv_ingestor.run(
     target_table  = f"{CONFIG['schemas']['bronze']}.ss1_companies",
     spark         = spark,
     log_table     = CONFIG["logging"]["file_ingestion_log_table"],
+    mode          ="bulk",
 )
 
 spark.stop()
