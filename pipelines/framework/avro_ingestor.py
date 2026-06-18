@@ -7,29 +7,31 @@ Iceberg table.
 Public API
 ----------
 run(source_system, source_dir, name_pattern, target_table, spark,
-    log_table, mandatory_columns, mode, strict)
+    log_table, mandatory_columns, mode, schema_evolution)
 
 The caller provides a directory and a glob pattern such as 'events_*.avro'.
 All matching files are resolved at runtime with pathlib.Path.glob().
 Already-processed files are excluded upfront with a single log table query.
 
-Modes and strict flag
----------------------
+Modes and schema_evolution flag
+--------------------------------
 mode="sequential" (default)
     Files are processed one by one. Schema is read from each file's embedded
     Avro header independently. One Iceberg write and one log entry per file.
-    strict=False (default): permissive alignment — new columns are added to
-        the target table; columns missing from source are filled with NULL.
-    strict=True: schema must match the target exactly — new or missing
-        columns raise immediately.
+    schema_evolution=True (default): permissive alignment — new columns are
+        added to the target table; columns missing from source are filled
+        with NULL.
+    schema_evolution=False: schema must match the target exactly — new or
+        missing columns raise immediately.
 
 mode="bulk"
     All unprocessed files are read in a single Spark operation via
     spark.read.format("avro").load(list_of_files). One Iceberg write;
     one log entry per file (row counts via groupBy on _source_file).
-    strict=False (default): mergeSchema=True on read; permissive alignment.
-    strict=True: mergeSchema=False on read (Spark errors on schema
-        differences across files); strict alignment against target.
+    schema_evolution=True (default): mergeSchema=True on read; permissive
+        alignment.
+    schema_evolution=False: mergeSchema=False on read (Spark errors on
+        schema differences across files); strict alignment against target.
 
 Sequence — sequential mode
 ---------------------------
@@ -38,7 +40,7 @@ Sequence — sequential mode
   Per-file loop:
     1. Read          - spark.read.format("avro") from embedded file schema
     2. Enrich        - add _source_system, _ingestion_timestamp, _source_file
-    3. Align schema  - validate mandatory columns; apply strict/permissive policy
+    3. Align schema  - validate mandatory columns; apply policy
     4. Write         - append_or_create via iceberg_writer
     5. Log success   - one entry per file
        On error      - log failure, continue remaining files
@@ -50,7 +52,7 @@ Sequence — bulk mode
   1. Read all      - spark.read.format("avro").load(all_files) with
                      mergeSchema=True/False; _metadata.file_path as _source_file
   2. Enrich        - add _source_system, _ingestion_timestamp
-  3. Align schema  - validate mandatory columns; apply strict/permissive policy
+  3. Align schema  - validate mandatory columns; apply policy
   4. Cache         - avoid double scan for count + write
   5. Count         - groupBy(_source_file).count() for per-file log entries
   6. Write         - single append_or_create
@@ -114,11 +116,11 @@ def _enrich(df, source_system: str):
     )
 
 
-def _align_policy(strict: bool) -> tuple[str, str]:
-    """Return (on_missing_column, on_new_column) based on strict flag."""
-    if strict:
-        return "fail", "fail"
-    return "fill_null", "add"
+def _align_policy(schema_evolution: bool) -> tuple[str, str]:
+    """Return (on_missing_column, on_new_column) based on schema_evolution flag."""
+    if schema_evolution:
+        return "fill_null", "add"
+    return "fail", "fail"
 
 
 # ---------------------------------------------------------------------------
@@ -132,12 +134,12 @@ def _ingest_file_sequential(
     target_table: str,
     log_table: str,
     mandatory_columns: list[str],
-    strict: bool,
+    schema_evolution: bool,
 ) -> bool:
     """Process one Avro file. Returns True on success, False on failure."""
     print(f"\n[file] {source_file} -> {target_table}")
 
-    on_missing_column, on_new_column = _align_policy(strict)
+    on_missing_column, on_new_column = _align_policy(schema_evolution)
 
     try:
         # --- 1. Read ----------------------------------------------------------
@@ -188,7 +190,7 @@ def _run_sequential(
     target_table: str,
     log_table: str,
     mandatory_columns: list[str],
-    strict: bool,
+    schema_evolution: bool,
 ) -> None:
     failed_files = []
 
@@ -196,7 +198,7 @@ def _run_sequential(
         success = _ingest_file_sequential(
             spark, source_system, source_file,
             target_table, log_table,
-            mandatory_columns, strict,
+            mandatory_columns, schema_evolution,
         )
         if not success:
             failed_files.append(source_file)
@@ -218,23 +220,23 @@ def _run_bulk(
     target_table: str,
     log_table: str,
     mandatory_columns: list[str],
-    strict: bool,
+    schema_evolution: bool,
 ) -> None:
     """
     Read all unprocessed files in one Spark operation.
     _source_file is captured per row via _metadata.file_path.
     One Iceberg write; one log entry per file.
     """
-    print(f"\n[bulk] Reading {len(unprocessed)} file(s) (strict={strict}) ...")
+    print(f"\n[bulk] Reading {len(unprocessed)} file(s) (schema_evolution={schema_evolution}) ...")
 
-    on_missing_column, on_new_column = _align_policy(strict)
+    on_missing_column, on_new_column = _align_policy(schema_evolution)
 
     try:
         # --- 1. Read all files ------------------------------------------------
         raw_df = (
             spark.read
             .format("avro")
-            .option("mergeSchema", str(not strict).lower())
+            .option("mergeSchema", str(schema_evolution).lower())
             .load(unprocessed)
         )
 
@@ -303,7 +305,7 @@ def run(
     log_table: str,
     mandatory_columns: list[str] | None = None,
     mode: str = "sequential",
-    strict: bool = False,
+    schema_evolution: bool = True,
 ) -> None:
     """
     Discover and ingest all Avro files matching name_pattern in source_dir
@@ -322,10 +324,10 @@ def run(
     mode              : "sequential" (default) — one file at a time, schema
                         read from each file's embedded Avro header.
                         "bulk" — all files in one Spark read operation.
-    strict            : False (default) — permissive: new columns are added to
+    schema_evolution  : True (default) — permissive: new columns are added to
                         the target table; columns missing from source are filled
                         with NULL. In bulk mode, mergeSchema=True on read.
-                        True — strict: schema must match exactly; new or missing
+                        False — strict: schema must match exactly; new or missing
                         columns raise immediately. In bulk mode, mergeSchema=False
                         on read (Spark errors on schema differences across files).
 
@@ -368,13 +370,13 @@ def run(
         _run_sequential(
             spark, source_system, unprocessed,
             target_table, log_table,
-            mandatory_columns, strict,
+            mandatory_columns, schema_evolution,
         )
     else:
         _run_bulk(
             spark, source_system, unprocessed,
             target_table, log_table,
-            mandatory_columns, strict,
+            mandatory_columns, schema_evolution,
         )
 
     print(f"\n[done] Finished ingesting into {target_table}.")
